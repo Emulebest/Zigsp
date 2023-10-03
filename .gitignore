@@ -1,4 +1,4 @@
-.zig-out
-.zig-cache
 .vscode
-.archive
+/zig-cache/
+/zig-out/
+/archive/
