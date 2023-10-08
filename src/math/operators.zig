@@ -2,7 +2,7 @@ const std = @import("std");
 const types = @import("../types.zig");
 const utils = @import("../utils.zig");
 
-const math_operators = [_][]const u8{ "*", "+", "-", "if", ">", "<", "=" };
+const math_operators = [_][]const u8{ "*", "+", "-", ">", "<", "=" };
 
 pub fn isMathOperator(keyword: []const u8) bool {
     if (utils.findString(&math_operators, keyword)) |_| {
@@ -46,6 +46,20 @@ pub fn substract(accum: i64, node: types.ASTNode) i64 {
 
 pub fn greater(operand_a: types.ASTNode, operand_b: types.ASTNode) bool {
     if (operand_a.Single.Number > operand_b.Single.Number) {
+        return true;
+    }
+    return false;
+}
+
+pub fn less(operand_a: types.ASTNode, operand_b: types.ASTNode) bool {
+    if (operand_a.Single.Number < operand_b.Single.Number) {
+        return true;
+    }
+    return false;
+}
+
+pub fn equal(operand_a: types.ASTNode, operand_b: types.ASTNode) bool {
+    if (operand_a.Single.Number == operand_b.Single.Number) {
         return true;
     }
     return false;

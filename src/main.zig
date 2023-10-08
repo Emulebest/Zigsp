@@ -8,35 +8,23 @@ pub const std_options = struct {
 };
 
 // const test_string = "(begin (define r 10) (* pi (* r r)))";
-const shorter_test_string = "(begin (define r (+ 20 10)) (> r 10))";
+const shorter_test_string = "(begin (define r (lambda (a b) (+ a b))) (define f (lambda (c d) (r c d))) (f 11 10))";
 const Allocator = std.mem.Allocator;
 
 pub const SyntaxErrors = error{UnexpectedTokenError};
 
-pub const Env = struct {
-    env: std.StringArrayHashMap(types.ASTNode),
-
-    pub fn init(alloca: *Allocator) Env {
-        return Env{ .env = std.StringArrayHashMap(types.ASTNode).init(alloca.*) };
-    }
-
-    pub fn deinit(self: *Env) void {
-        self.env.deinit();
-    }
-};
-
 pub const Interpreter = struct {
     const Self = @This();
 
-    const keywords = [_][]const u8{ "begin", "define", "*", "+", "-", "if", ">", "<", "=" };
+    const keywords = [_][]const u8{ "begin", "define", "*", "+", "-", "if", ">", "<", "=", "lambda" };
 
     allocator: *Allocator,
     token_set: ?*types.ASTNode,
     parsed_string: ?std.ArrayList(std.ArrayList(u8)),
-    env: Env,
+    env: types.Env,
 
     pub fn init(alloca: *Allocator) Interpreter {
-        return Interpreter{ .allocator = alloca, .token_set = null, .parsed_string = null, .env = Env.init(alloca) };
+        return Interpreter{ .allocator = alloca, .token_set = null, .parsed_string = null, .env = types.Env.init(alloca) };
     }
 
     fn storeParsedInput(self: *Self, input: std.ArrayList(std.ArrayList(u8))) !void {
@@ -86,9 +74,19 @@ pub const Interpreter = struct {
                     self.deinitAst(t);
                 }
             },
-            .Single => |item| {
-                switch (item) {
+            .Single => |*item| {
+                switch (item.*) {
                     .String => |*string| {
+                        if (self.env.find(string.items)) |value| {
+                            var copy = value;
+                            switch (copy.Single) {
+                                .Function => |*f| {
+                                    std.log.debug("Deiniting Function\n", .{});
+                                    f.deinit();
+                                },
+                                else => {},
+                            }
+                        }
                         std.log.debug("Deiniting String: {s}\n", .{item.String.items});
                         string.deinit();
                     },
@@ -130,11 +128,11 @@ pub const Interpreter = struct {
     fn _tokenize(self: *Self, parsed_input: *std.ArrayList(std.ArrayList(u8))) !types.ASTNode {
         var token: std.ArrayList(u8) = parsed_input.orderedRemove(0);
         if (std.mem.eql(u8, token.items, "(")) {
-            // std.debug.print("Open bracket encountered \n", .{});
+            std.log.debug("Open bracket encountered \n", .{});
             defer token.deinit();
             var local_node = types.ASTNode{ .Expr = std.ArrayList(types.ASTNode).init(self.allocator.*) };
             while (!std.mem.eql(u8, parsed_input.items[0].items, ")")) {
-                // std.debug.print("While loop iteration \n", .{});
+                std.log.debug("While loop iteration \n", .{});
                 var item_to_add = try self._tokenize(parsed_input);
                 try local_node.Expr.append(item_to_add);
             }
@@ -146,7 +144,7 @@ pub const Interpreter = struct {
             return SyntaxErrors.UnexpectedTokenError;
         } else {
             var item = types.ASTNode{ .Single = try Interpreter.atomize(token) };
-            // std.debug.print("Single item encountered: {s} \n", .{item.Single.String.items});
+            std.log.debug("Single node item encountered \n", .{});
             return item;
         }
     }
@@ -173,7 +171,7 @@ pub const Interpreter = struct {
     pub fn _printAst(self: Self, node: types.ASTNode) void {
         switch (node) {
             .Expr => |expr| {
-                std.debug.print("Processing Expression \n", .{});
+                std.log.debug("Processing Expression \n", .{});
                 for (expr.items) |t| {
                     self._printAst(t);
                 }
@@ -198,6 +196,9 @@ pub const Interpreter = struct {
             .String => |s| {
                 std.log.info("Processing String Token: {s}\n", .{s.items});
             },
+            .Function => |_| {
+                std.log.info("Processing Function\n", .{});
+            },
         }
     }
 
@@ -211,13 +212,13 @@ pub const Interpreter = struct {
     //     if (std.mem.eql(u8, keyword, "+")) {
     //         var accum = @as(i64, 0);
     //         for (expr.items[1..expr.items.len]) |*exp| {
-    //             accum = math.add(accum, try self.eval(exp));
+    //             accum = math.add(accum, try self._eval(exp));
     //         }
     //         return types.ASTNode{ .Single = types.Type{ .Number = accum } };
     //     } else if (std.mem.eql(u8, keyword, "-")) {
     //         var accum = expr.items[1].Single.Number;
     //         for (expr.items[1..expr.items.len]) |*exp| {
-    //             accum = math.substract(accum, try self.eval(exp));
+    //             accum = math.substract(accum, try self._eval(exp));
     //         }
     //         return types.ASTNode{ .Single = types.Type{ .Number = accum } };
     //     } else {
@@ -225,47 +226,84 @@ pub const Interpreter = struct {
     //     }
     // }
 
-    pub fn eval(self: *Self, ast: *types.ASTNode) !types.ASTNode {
+    pub fn _eval(self: *Self, ast: *types.ASTNode, env: *types.Env) !types.ASTNode {
         switch (ast.*) {
             .Expr => |expr| {
-                var keyword = expr.items[0].Single.Keyword;
-                if (std.mem.eql(u8, keyword, "define")) {
-                    var set_value = try self.eval(&expr.items[2]);
-                    try self.env.env.put(expr.items[1].Single.String.items, set_value);
-                    return set_value;
-                } else if (std.mem.eql(u8, keyword, "begin")) {
-                    for (expr.items[1 .. expr.items.len - 1]) |*exp| {
-                        _ = try self.eval(exp);
-                    }
-                    var last = expr.getLast();
-                    return self.eval(&last);
-                } else if (math.isMathOperator(keyword)) {
-                    if (std.mem.eql(u8, keyword, "+")) {
-                        var accum = @as(i64, 0);
-                        for (expr.items[1..expr.items.len]) |*exp| {
-                            accum = math.add(accum, try self.eval(exp));
+                switch (expr.items[0].Single) {
+                    .String => {
+                        var function_token = try self._eval(&expr.items[0], env);
+                        var function = function_token.Single.Function;
+                        defer function.env.deinit();
+                        for (function.parameter_names.items, 1..) |param, index| {
+                            try function.env.env.put(param, try self._eval(&expr.items[index], env));
                         }
-                        return types.ASTNode{ .Single = types.Type{ .Number = accum } };
-                    } else if (std.mem.eql(u8, keyword, "-")) {
-                        var accum = expr.items[1].Single.Number;
-                        for (expr.items[2..expr.items.len]) |*exp| {
-                            accum = math.substract(accum, try self.eval(exp));
+
+                        return try self._eval(function.body, &function.env);
+                    },
+                    .Keyword => |keyword| {
+                        if (std.mem.eql(u8, keyword, "define")) {
+                            var set_value = try self._eval(&expr.items[2], env);
+                            try env.env.put(expr.items[1].Single.String.items, set_value);
+                            return set_value;
+                        } else if (std.mem.eql(u8, keyword, "begin")) {
+                            for (expr.items[1 .. expr.items.len - 1]) |*exp| {
+                                _ = try self._eval(exp, env);
+                            }
+                            var last = expr.getLast();
+                            return self._eval(&last, env);
+                        } else if (math.isMathOperator(keyword)) {
+                            if (std.mem.eql(u8, keyword, "+")) {
+                                var accum = @as(i64, 0);
+                                for (expr.items[1..expr.items.len]) |*exp| {
+                                    var calc = try self._eval(exp, env);
+                                    accum = math.add(accum, calc);
+                                }
+                                return types.ASTNode{ .Single = types.Type{ .Number = accum } };
+                            } else if (std.mem.eql(u8, keyword, "-")) {
+                                var accum = expr.items[1].Single.Number;
+                                for (expr.items[2..expr.items.len]) |*exp| {
+                                    accum = math.substract(accum, try self._eval(exp, env));
+                                }
+                                return types.ASTNode{ .Single = types.Type{ .Number = accum } };
+                            } else if (std.mem.eql(u8, keyword, ">")) {
+                                var result = math.greater(try self._eval(&expr.items[1], env), try self._eval(&expr.items[2], env));
+                                return types.ASTNode{ .Single = types.Type{ .Bool = result } };
+                            } else if (std.mem.eql(u8, keyword, "<")) {
+                                var result = math.less(try self._eval(&expr.items[1], env), try self._eval(&expr.items[2], env));
+                                return types.ASTNode{ .Single = types.Type{ .Bool = result } };
+                            } else if (std.mem.eql(u8, keyword, "=")) {
+                                var result = math.equal(try self._eval(&expr.items[1], env), try self._eval(&expr.items[2], env));
+                                return types.ASTNode{ .Single = types.Type{ .Bool = result } };
+                            } else {
+                                unreachable;
+                            }
+                        } else if (std.mem.eql(u8, keyword, "if")) {
+                            var predicate = try self._eval(&expr.items[1], env);
+                            if (predicate.Single.Bool == true) {
+                                return try self._eval(&expr.items[2], env);
+                            } else {
+                                return try self._eval(&expr.items[3], env);
+                            }
+                        } else if (std.mem.eql(u8, keyword, "lambda")) {
+                            var function_params = expr.items[1].Expr.items;
+                            var params_list = std.ArrayList([]const u8).init(self.allocator.*);
+                            for (function_params) |param| {
+                                try params_list.append(param.Single.String.items);
+                            }
+                            return types.ASTNode{ .Single = types.Type{ .Function = types.Function.init(self.allocator, env, params_list, &expr.items[2]) } };
+                        } else {
+                            unreachable;
                         }
-                        return types.ASTNode{ .Single = types.Type{ .Number = accum } };
-                    } else if (std.mem.eql(u8, keyword, ">")) {
-                        var result = math.greater(try self.eval(&expr.items[1]), try self.eval(&expr.items[2]));
-                        return types.ASTNode{ .Single = types.Type{ .Bool = result } };
-                    } else {
-                        unreachable;
-                    }
-                } else {
-                    unreachable;
+                    },
+                    else => {
+                        return SyntaxErrors.UnexpectedTokenError;
+                    },
                 }
             },
             .Single => |item| {
                 switch (item) {
                     .String => |variable| {
-                        return self.env.env.get(variable.items).?;
+                        return env.find(variable.items).?;
                     },
                     .Bool => |b| {
                         return types.ASTNode{ .Single = types.Type{ .Bool = b } };
@@ -276,10 +314,17 @@ pub const Interpreter = struct {
                     .Number => |n| {
                         return types.ASTNode{ .Single = types.Type{ .Number = n } };
                     },
+                    else => {
+                        return SyntaxErrors.UnexpectedTokenError;
+                    },
                 }
             },
         }
         unreachable;
+    }
+
+    pub fn eval(self: *Self, ast: *types.ASTNode) !types.ASTNode {
+        return self._eval(ast, &self.env);
     }
 };
 

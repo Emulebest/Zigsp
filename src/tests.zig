@@ -36,3 +36,27 @@ test "simple '>' expression works fine" {
     var result = try interpreter.eval(ast);
     try std.testing.expect(result.Single.Bool == false);
 }
+
+test "if expression test" {
+    const shorter_test_string = "(begin (define r (if (> 10 15) 10 15)) (+ r 4))";
+
+    var allocator = std.testing.allocator;
+    var interpreter = main.Interpreter.init(&allocator);
+    defer interpreter.deinit();
+    var parsed_string = try interpreter.parse(shorter_test_string);
+    var ast = try interpreter.tokenize(&parsed_string);
+    var result = try interpreter.eval(ast);
+    try std.testing.expect(result.Single.Number == 19);
+}
+
+test "lambda expression test" {
+    const shorter_test_string = "(begin (define r (lambda (a b) (+ a b))) (r 10 5))";
+
+    var allocator = std.testing.allocator;
+    var interpreter = main.Interpreter.init(&allocator);
+    defer interpreter.deinit();
+    var parsed_string = try interpreter.parse(shorter_test_string);
+    var ast = try interpreter.tokenize(&parsed_string);
+    var result = try interpreter.eval(ast);
+    try std.testing.expect(result.Single.Number == 15);
+}
