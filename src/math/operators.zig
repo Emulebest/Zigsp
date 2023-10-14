@@ -2,7 +2,7 @@ const std = @import("std");
 const types = @import("../types.zig");
 const utils = @import("../utils.zig");
 
-const math_operators = [_][]const u8{ "*", "+", "-", ">", "<", "=" };
+const math_operators = [_][]const u8{ "*", "+", "-", ">", "<", "=", "<=", ">=", "/" };
 
 pub fn isMathOperator(keyword: []const u8) bool {
     if (utils.findString(&math_operators, keyword)) |_| {
@@ -63,4 +63,50 @@ pub fn equal(operand_a: types.ASTNode, operand_b: types.ASTNode) bool {
         return true;
     }
     return false;
+}
+
+pub fn greaterOrEqual(operand_a: types.ASTNode, operand_b: types.ASTNode) bool {
+    if (operand_a.Single.Number >= operand_b.Single.Number) {
+        return true;
+    }
+    return false;
+}
+
+pub fn lessOrEqual(operand_a: types.ASTNode, operand_b: types.ASTNode) bool {
+    if (operand_a.Single.Number <= operand_b.Single.Number) {
+        return true;
+    }
+    return false;
+}
+
+pub fn multiply(accum: i64, node: types.ASTNode) i64 {
+    switch (node) {
+        .Expr => {
+            unreachable;
+        },
+        .Single => |val| {
+            switch (val) {
+                .Number => |num| {
+                    return accum * num;
+                },
+                else => unreachable,
+            }
+        },
+    }
+}
+
+pub fn divide(accum: i64, node: types.ASTNode) i64 {
+    switch (node) {
+        .Expr => {
+            unreachable;
+        },
+        .Single => |val| {
+            switch (val) {
+                .Number => |num| {
+                    return @divFloor(accum, num);
+                },
+                else => unreachable,
+            }
+        },
+    }
 }

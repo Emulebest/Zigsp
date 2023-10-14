@@ -7,8 +7,6 @@ pub const std_options = struct {
     pub const log_level = .info;
 };
 
-// const test_string = "(begin (define r 10) (* pi (* r r)))";
-const shorter_test_string = "(begin (define r (lambda (a b) (+ a b))) (define f (lambda (c d) (r c d))) (f 11 10))";
 const Allocator = std.mem.Allocator;
 
 pub const SyntaxErrors = error{UnexpectedTokenError};
@@ -16,7 +14,7 @@ pub const SyntaxErrors = error{UnexpectedTokenError};
 pub const Interpreter = struct {
     const Self = @This();
 
-    const keywords = [_][]const u8{ "begin", "define", "*", "+", "-", "if", ">", "<", "=", "lambda" };
+    const keywords = [_][]const u8{ "begin", "define", "*", "+", "-", "if", ">", "<", "=", "<=", ">=", "/", "lambda" };
 
     allocator: *Allocator,
     token_set: ?*types.ASTNode,
@@ -182,6 +180,30 @@ pub const Interpreter = struct {
         }
     }
 
+    pub fn nodeToString(self: Self, node: types.ASTNode) ![]const u8 {
+        var alloca = self.allocator.*;
+        switch (node.Single) {
+            .Bool => |b| {
+                if (b) {
+                    return try std.fmt.allocPrint(alloca, "true", .{});
+                }
+                return try std.fmt.allocPrint(alloca, "false", .{});
+            },
+            .Keyword => |k| {
+                return try std.fmt.allocPrint(alloca, "{s}", .{k});
+            },
+            .Number => |n| {
+                return try std.fmt.allocPrint(alloca, "{d}", .{n});
+            },
+            .String => |s| {
+                return try std.fmt.allocPrint(alloca, "{s}", .{s.items});
+            },
+            .Function => |_| {
+                return try std.fmt.allocPrint(alloca, "Function", .{});
+            },
+        }
+    }
+
     fn printAtom(atom: types.Type) void {
         switch (atom) {
             .Bool => |b| {
@@ -253,16 +275,31 @@ pub const Interpreter = struct {
                             return self._eval(&last, env);
                         } else if (math.isMathOperator(keyword)) {
                             if (std.mem.eql(u8, keyword, "+")) {
-                                var accum = @as(i64, 0);
-                                for (expr.items[1..expr.items.len]) |*exp| {
-                                    var calc = try self._eval(exp, env);
-                                    accum = math.add(accum, calc);
+                                var accum_node = try self._eval(&expr.items[1], env);
+                                var accum = accum_node.Single.Number;
+                                for (expr.items[2..expr.items.len]) |*exp| {
+                                    accum = math.add(accum, try self._eval(exp, env));
                                 }
                                 return types.ASTNode{ .Single = types.Type{ .Number = accum } };
                             } else if (std.mem.eql(u8, keyword, "-")) {
-                                var accum = expr.items[1].Single.Number;
+                                var accum_node = try self._eval(&expr.items[1], env);
+                                var accum = accum_node.Single.Number;
                                 for (expr.items[2..expr.items.len]) |*exp| {
                                     accum = math.substract(accum, try self._eval(exp, env));
+                                }
+                                return types.ASTNode{ .Single = types.Type{ .Number = accum } };
+                            } else if (std.mem.eql(u8, keyword, "*")) {
+                                var accum_node = try self._eval(&expr.items[1], env);
+                                var accum = accum_node.Single.Number;
+                                for (expr.items[2..expr.items.len]) |*exp| {
+                                    accum = math.multiply(accum, try self._eval(exp, env));
+                                }
+                                return types.ASTNode{ .Single = types.Type{ .Number = accum } };
+                            } else if (std.mem.eql(u8, keyword, "/")) {
+                                var accum_node = try self._eval(&expr.items[1], env);
+                                var accum = accum_node.Single.Number;
+                                for (expr.items[2..expr.items.len]) |*exp| {
+                                    accum = math.divide(accum, try self._eval(exp, env));
                                 }
                                 return types.ASTNode{ .Single = types.Type{ .Number = accum } };
                             } else if (std.mem.eql(u8, keyword, ">")) {
@@ -274,6 +311,12 @@ pub const Interpreter = struct {
                             } else if (std.mem.eql(u8, keyword, "=")) {
                                 var result = math.equal(try self._eval(&expr.items[1], env), try self._eval(&expr.items[2], env));
                                 return types.ASTNode{ .Single = types.Type{ .Bool = result } };
+                            } else if (std.mem.eql(u8, keyword, ">=")) {
+                                var result = math.greaterOrEqual(try self._eval(&expr.items[1], env), try self._eval(&expr.items[2], env));
+                                _ = result;
+                            } else if (std.mem.eql(u8, keyword, "<=")) {
+                                var result = math.lessOrEqual(try self._eval(&expr.items[1], env), try self._eval(&expr.items[2], env));
+                                _ = result;
                             } else {
                                 unreachable;
                             }
@@ -336,17 +379,43 @@ pub fn moveToHeap(allocator: *Allocator, value: anytype) !*@TypeOf(value) {
     return ptr;
 }
 
+fn replaceNewLine(input: []u8) void {
+    std.mem.replaceScalar(u8, input, '\n', ' ');
+}
+
+pub fn readFile(alloca: Allocator, path: []const u8) ![]u8 {
+    var file = try std.fs.openFileAbsolute(path, .{});
+    defer file.close();
+    var stat = try file.stat();
+    const contents = try file.reader().readAllAlloc(
+        alloca,
+        stat.size,
+    );
+    return contents;
+}
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
         _ = gpa.deinit();
     }
     var allocator = gpa.allocator();
+
+    const args = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, args);
+
+    var input = try readFile(allocator, args[1]);
+    replaceNewLine(input);
+    defer allocator.free(input);
+
     var interpreter = Interpreter.init(&allocator);
     defer interpreter.deinit();
-    var parsed_string = try interpreter.parse(shorter_test_string);
+    var parsed_string = try interpreter.parse(input);
     var ast = try interpreter.tokenize(&parsed_string);
     // interpreter.print_ast();
     var result = try interpreter.eval(ast);
-    interpreter._printAst(result);
+
+    var string_result = try interpreter.nodeToString(result);
+    defer allocator.free(string_result);
+    std.log.info("zigsp> {s}", .{string_result});
 }
