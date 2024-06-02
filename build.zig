@@ -21,7 +21,7 @@ pub fn build(b: *std.Build) void {
         // complicated build scripts, this could be a generated file.
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
-        .optimize = optimize,
+        .optimize = optimize
     });
 
     // This declares intent for the executable to be installed into the
@@ -57,7 +57,7 @@ pub fn build(b: *std.Build) void {
     const unit_tests = b.addTest(.{
         .root_source_file = .{ .path = "src/tests.zig" },
         .target = target,
-        .optimize = optimize,
+        .optimize = optimize
     });
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
