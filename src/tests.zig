@@ -13,7 +13,7 @@ test "simple '+' expression works fine" {
     defer interpreter.deinit();
     var parsed_string = try interpreter.parse(shorter_test_string);
     const ast = try interpreter.tokenize(&parsed_string);
-    const result = try interpreter.eval(ast);
+    const result = try interpreter.eval(&ast);
     try std.testing.expect(result.Single.Number == 30);
 }
 
@@ -25,7 +25,7 @@ test "simple '-' expression works fine" {
     defer interpreter.deinit();
     var parsed_string = try interpreter.parse(shorter_test_string);
     const ast = try interpreter.tokenize(&parsed_string);
-    const result = try interpreter.eval(ast);
+    const result = try interpreter.eval(&ast);
     try std.testing.expect(result.Single.Number == 20);
 }
 
@@ -37,7 +37,7 @@ test "simple '*' expression works fine" {
     defer interpreter.deinit();
     var parsed_string = try interpreter.parse(shorter_test_string);
     const ast = try interpreter.tokenize(&parsed_string);
-    const result = try interpreter.eval(ast);
+    const result = try interpreter.eval(&ast);
     try std.testing.expect(result.Single.Number == 20);
 }
 
@@ -49,7 +49,7 @@ test "simple '/' expression works fine" {
     defer interpreter.deinit();
     var parsed_string = try interpreter.parse(shorter_test_string);
     const ast = try interpreter.tokenize(&parsed_string);
-    const result = try interpreter.eval(ast);
+    const result = try interpreter.eval(&ast);
     try std.testing.expect(result.Single.Number == 5);
 }
 
@@ -61,7 +61,7 @@ test "simple '>' expression works fine" {
     defer interpreter.deinit();
     var parsed_string = try interpreter.parse(shorter_test_string);
     const ast = try interpreter.tokenize(&parsed_string);
-    const result = try interpreter.eval(ast);
+    const result = try interpreter.eval(&ast);
     try std.testing.expect(result.Single.Bool == false);
 }
 
@@ -73,7 +73,7 @@ test "if expression test" {
     defer interpreter.deinit();
     var parsed_string = try interpreter.parse(shorter_test_string);
     const ast = try interpreter.tokenize(&parsed_string);
-    const result = try interpreter.eval(ast);
+    const result = try interpreter.eval(&ast);
     try std.testing.expect(result.Single.Number == 19);
 }
 
@@ -85,7 +85,7 @@ test "lambda expression test" {
     defer interpreter.deinit();
     var parsed_string = try interpreter.parse(shorter_test_string);
     const ast = try interpreter.tokenize(&parsed_string);
-    const result = try interpreter.eval(ast);
+    const result = try interpreter.eval(&ast);
     try std.testing.expect(result.Single.Number == 15);
 }
 
@@ -97,7 +97,7 @@ test "recursive lambda expression test" {
     defer interpreter.deinit();
     var parsed_string = try interpreter.parse(shorter_test_string);
     const ast = try interpreter.tokenize(&parsed_string);
-    const result = try interpreter.eval(ast);
+    const result = try interpreter.eval(&ast);
     try std.testing.expect(result.Single.Number == 5);
 }
 
@@ -109,7 +109,7 @@ test "recursive factorial lambda expression test" {
     defer interpreter.deinit();
     var parsed_string = try interpreter.parse(shorter_test_string);
     const ast = try interpreter.tokenize(&parsed_string);
-    const result = try interpreter.eval(ast);
+    const result = try interpreter.eval(&ast);
     try std.testing.expect(result.Single.Number == 120);
 }
 
@@ -121,6 +121,6 @@ test "recursive fibonacci lambda expression test" {
     defer interpreter.deinit();
     var parsed_string = try interpreter.parse(shorter_test_string);
     const ast = try interpreter.tokenize(&parsed_string);
-    const result = try interpreter.eval(ast);
+    const result = try interpreter.eval(&ast);
     try std.testing.expect(result.Single.Number == 55);
 }

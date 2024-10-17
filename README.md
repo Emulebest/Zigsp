@@ -15,7 +15,7 @@ What works:
 
 What isn't implemented:
 1) Lists
-2) Recursion (it is buggy at the moment)
+2) ~~Recursion (it is buggy at the moment)~~ seems to be okay now
 3) Macros
 4) More complex data types (strings, vectors, etc.)
 5) Quotes 

@@ -4,7 +4,7 @@ const math = @import("math/operators.zig");
 const utils = @import("utils.zig");
 const state = @import("state.zig");
 
-pub const std_options: std.Options = .{ .log_level = .debug };
+pub const std_options: std.Options = .{ .log_level = .info };
 
 const Allocator = std.mem.Allocator;
 
@@ -16,7 +16,7 @@ pub const Interpreter = struct {
     const keywords = [_][]const u8{ "begin", "define", "*", "+", "-", "if", ">", "<", "=", "<=", ">=", "/", "lambda" };
 
     allocator: *Allocator,
-    token_set: ?*types.ASTNode,
+    token_set: ?types.ASTNode,
     parsed_string: ?std.ArrayList(std.ArrayList(u8)),
     env: types.Env,
     state: state.State,
@@ -70,12 +70,12 @@ pub const Interpreter = struct {
         return result_list;
     }
 
-    fn deinitAst(self: *Self, node: *types.ASTNode) void {
-        switch (node.*) {
+    fn deinitAst(self: *Self, node: types.ASTNode) void {
+        switch (node) {
             .Expr => |expr| {
                 std.log.debug("Processing Expression \n", .{});
                 defer expr.deinit();
-                for (expr.items) |*t| {
+                for (expr.items) |t| {
                     self.deinitAst(t);
                 }
             },
@@ -102,9 +102,8 @@ pub const Interpreter = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        if (self.token_set) |*value| {
-            defer self.allocator.destroy(value.*);
-            self.deinitAst(value.*);
+        if (self.token_set) |value| {
+            self.deinitAst(value);
         }
         if (self.parsed_string) |string| {
             defer string.deinit();
@@ -123,15 +122,14 @@ pub const Interpreter = struct {
     }
 
     // Consumes the input string
-    pub fn tokenize(self: *Self, parsed_input: *std.ArrayList(std.ArrayList(u8))) !*types.ASTNode {
+    pub fn tokenize(self: *Self, parsed_input: *std.ArrayList(std.ArrayList(u8))) !types.ASTNode {
         defer parsed_input.deinit();
         const tokenized_input = self._tokenize(parsed_input) catch |err| {
             std.log.err("Error encountered while tokenizing: {} at symbol {d}\n", .{err, self.state.current_symbol});
             return err;
         };
-        const token_set = try moveToHeap(self.allocator, tokenized_input);
-        self.token_set = token_set;
-        return token_set;
+        self.token_set = tokenized_input;
+        return tokenized_input;
     }
 
     fn _tokenize(self: *Self, parsed_input: *std.ArrayList(std.ArrayList(u8))) !types.ASTNode {
@@ -263,7 +261,7 @@ pub const Interpreter = struct {
     //     }
     // }
 
-    pub fn _eval(self: *Self, ast: *types.ASTNode, env: *types.Env) !types.ASTNode {
+    pub fn _eval(self: *Self, ast: *const types.ASTNode, env: *types.Env) !types.ASTNode {
         switch (ast.*) {
             .Expr => |expr| {
                 switch (expr.items[0].Single) {
@@ -381,18 +379,10 @@ pub const Interpreter = struct {
         unreachable;
     }
 
-    pub fn eval(self: *Self, ast: *types.ASTNode) !types.ASTNode {
+    pub fn eval(self: *Self, ast: *const types.ASTNode) !types.ASTNode {
         return self._eval(ast, &self.env);
     }
 };
-
-pub fn moveToHeap(allocator: *Allocator, value: anytype) !*@TypeOf(value) {
-    const T = @TypeOf(value);
-    std.debug.assert(@typeInfo(T) != .Pointer);
-    const ptr = try allocator.create(T);
-    ptr.* = value;
-    return ptr;
-}
 
 fn replaceNewLine(input: []u8) void {
     std.mem.replaceScalar(u8, input, '\n', ' ');
@@ -431,7 +421,7 @@ pub fn main() !void {
     var parsed_string = try interpreter.parse(input);
     const ast = try interpreter.tokenize(&parsed_string);
     // interpreter.print_ast();
-    const result = try interpreter.eval(ast);
+    const result = try interpreter.eval(&ast);
 
     const string_result = try interpreter.nodeToString(result);
     defer allocator.free(string_result);
