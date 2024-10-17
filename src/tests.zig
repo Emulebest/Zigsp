@@ -1,6 +1,10 @@
 const std = @import("std");
 const main = @import("main.zig");
 
+pub const std_options: std.Options = .{
+    .log_level = .debug
+};
+
 test "simple '+' expression works fine" {
     const shorter_test_string = "(begin (define r (+ 10 10)) (+ r 10))";
 
@@ -83,4 +87,40 @@ test "lambda expression test" {
     const ast = try interpreter.tokenize(&parsed_string);
     const result = try interpreter.eval(ast);
     try std.testing.expect(result.Single.Number == 15);
+}
+
+test "recursive lambda expression test" {
+    const shorter_test_string = "(begin (define r (lambda (a b) (if (> a 0) (r (- a 1) b) b))) (r 10 5))";
+
+    var allocator = std.testing.allocator;
+    var interpreter = main.Interpreter.init(&allocator);
+    defer interpreter.deinit();
+    var parsed_string = try interpreter.parse(shorter_test_string);
+    const ast = try interpreter.tokenize(&parsed_string);
+    const result = try interpreter.eval(ast);
+    try std.testing.expect(result.Single.Number == 5);
+}
+
+test "recursive factorial lambda expression test" {
+    const shorter_test_string = "(begin (define r (lambda (a) (if (> a 0) (* a (r (- a 1))) 1))) (r 5))";
+
+    var allocator = std.testing.allocator;
+    var interpreter = main.Interpreter.init(&allocator);
+    defer interpreter.deinit();
+    var parsed_string = try interpreter.parse(shorter_test_string);
+    const ast = try interpreter.tokenize(&parsed_string);
+    const result = try interpreter.eval(ast);
+    try std.testing.expect(result.Single.Number == 120);
+}
+
+test "recursive fibonacci lambda expression test" {
+    const shorter_test_string = "(begin (define r (lambda (a) (if (> a 1) (+ (r (- a 1)) (r (- a 2))) a))) (r 10))";
+
+    var allocator = std.testing.allocator;
+    var interpreter = main.Interpreter.init(&allocator);
+    defer interpreter.deinit();
+    var parsed_string = try interpreter.parse(shorter_test_string);
+    const ast = try interpreter.tokenize(&parsed_string);
+    const result = try interpreter.eval(ast);
+    try std.testing.expect(result.Single.Number == 55);
 }

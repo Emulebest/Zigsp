@@ -2,10 +2,9 @@ const std = @import("std");
 const types = @import("types.zig");
 const math = @import("math/operators.zig");
 const utils = @import("utils.zig");
+const state = @import("state.zig");
 
-pub const std_options: std.Options = .{
-    .log_level = .info
-};
+pub const std_options: std.Options = .{ .log_level = .debug };
 
 const Allocator = std.mem.Allocator;
 
@@ -20,9 +19,16 @@ pub const Interpreter = struct {
     token_set: ?*types.ASTNode,
     parsed_string: ?std.ArrayList(std.ArrayList(u8)),
     env: types.Env,
+    state: state.State,
 
     pub fn init(alloca: *Allocator) Interpreter {
-        return Interpreter{ .allocator = alloca, .token_set = null, .parsed_string = null, .env = types.Env.init(alloca) };
+        return Interpreter{
+            .allocator = alloca,
+            .token_set = null,
+            .parsed_string = null,
+            .env = types.Env.init(alloca),
+            .state = state.State{ .current_symbol = 0, .initial_string = "" },
+        };
     }
 
     fn storeParsedInput(self: *Self, input: std.ArrayList(std.ArrayList(u8))) !void {
@@ -35,6 +41,7 @@ pub const Interpreter = struct {
     }
 
     pub fn parse(self: *Self, input_string: []const u8) !std.ArrayList(std.ArrayList(u8)) {
+        self.state.initial_string = input_string;
         var result_list = std.ArrayList(std.ArrayList(u8)).init(self.allocator.*);
         var string_buffer = std.ArrayList(u8).init(self.allocator.*);
         defer string_buffer.deinit();
@@ -118,13 +125,18 @@ pub const Interpreter = struct {
     // Consumes the input string
     pub fn tokenize(self: *Self, parsed_input: *std.ArrayList(std.ArrayList(u8))) !*types.ASTNode {
         defer parsed_input.deinit();
-        const token_set = try moveToHeap(self.allocator, try self._tokenize(parsed_input));
+        const tokenized_input = self._tokenize(parsed_input) catch |err| {
+            std.log.err("Error encountered while tokenizing: {} at symbol {d}\n", .{err, self.state.current_symbol});
+            return err;
+        };
+        const token_set = try moveToHeap(self.allocator, tokenized_input);
         self.token_set = token_set;
         return token_set;
     }
 
     fn _tokenize(self: *Self, parsed_input: *std.ArrayList(std.ArrayList(u8))) !types.ASTNode {
         var token: std.ArrayList(u8) = parsed_input.orderedRemove(0);
+        self.state.current_symbol += 1;
         if (std.mem.eql(u8, token.items, "(")) {
             std.log.debug("Open bracket encountered \n", .{});
             defer token.deinit();
@@ -133,6 +145,9 @@ pub const Interpreter = struct {
                 std.log.debug("While loop iteration \n", .{});
                 const item_to_add = try self._tokenize(parsed_input);
                 try local_node.Expr.append(item_to_add);
+                if (parsed_input.items.len == 0) {
+                    return SyntaxErrors.UnexpectedTokenError;
+                }
             }
             var closing_bracket = parsed_input.orderedRemove(0);
             defer closing_bracket.deinit();
@@ -403,7 +418,10 @@ pub fn main() !void {
 
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
-
+    if (args.len != 2) {
+        std.log.err("Usage: {s} <filename>", .{args[0]});
+        return;
+    }
     const input = try readFile(allocator, args[1]);
     replaceNewLine(input);
     defer allocator.free(input);
